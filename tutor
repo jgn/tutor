@@ -1,0 +1,451 @@
+#!/usr/bin/env bash
+if [ $# -eq 0 ]
+then
+  echo "Usage: $(basename "$0") <markdown-file>"
+  exit
+fi
+
+##### configuration you might want to mess with
+# 
+# Because glow (apparently) always respects line breaks in paragraphs, we need to fill and wrap
+# there is a `wrap` command in the bin/ dir here. it will delegate to the standard *nix `fmt`
+# command. Or if you want to justify text, try `par` which is available from Homebrrew
+FORMATTER="fmt"
+# FORMATTER="par -j"
+
+# The margin to use in glow
+export GLOW_MARGIN=1
+#
+#####
+
+INDENT=""
+local i
+for i in {0..$GLOW_MARGIN}; do
+  INDENT+=" "
+done
+
+MARKDOWN_FILE=$1
+H="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+WRAPPER=
+if which -s wrap; then
+  WRAPPER=wrap
+fi
+
+# Get a stylesheet into place so it can be used by glow
+TMP=/tmp/tutor
+mkdir -p $TMP
+STYLE_JSON=$TMP/glow-style-tutorial.json
+base64 -d <<EOF | uncompress | envsubst >$STYLE_JSON
+H52QexSAACGCzJsxddqUcUNHhA4QAQcOFDHmDZs3chwSlFFDhggWAiWKaBNGzpk0bjSSOMLkyZUvTYJI
+OZLEScg+ICeKuThmzZc4dd7QKaMxokiUZBY2fAgj51E3SRl+ofNmzUKNIsRREkTwplMRcEqGOSMnDBw0
+RXGGFMEmzZylEENOZFPGThk2X5Aq1SjD61o0ZcKQQXmmqFyCOw/6nFPHjJk0eLBySel0YsWLGR+KmJHj
+42ERYiyS0UhHTp0yfieiiWFYIkE4cso8jqyZYGWCjB1Dxmr782WMWGXIwOHZNegwPcm+qQP1y+/MBG3M
+KC4yNJvRD0ufTk0QjceHRifClr27NvWJuWfzPk/wOVYa7I8nl7O8uXvNMOJbxw5CO+qBaqk2HXifjaee
+ZiJwJwIa8BFonIHlETTChCN0BeBXaNTQmkgQ0iYhhRUmeOFfNmwoXmwHfghib8bdR9AMGt4GmmgamREG
+G3P8B0KABA2FB1x78CjCW3KkYRUdaNBXxxloOSjSGPTNkSMZXywHl38KltHGWSYSlAYdN6YxBmmm6Sgk
+kW+4UZiTOtGYXZkKJtklRRYBp5kMNOQnoxkYkQSXCJO1IOiggk4m4o5ffanlnIn19EWHWIkDiCgWIrrW
+QgmVURYdaaTJKE8+QaqZC5UKCeYca8zJaU9l8CfCFuJwMkkXLIrE3KpWuboFCLQeKmRbbqTKZnt1QreZ
+np8xl5QcwBL15nYjzoWSTz4C6VuxWMGon5v9wRmtlySd4WxcLWJ7Zwweyaisps2SCa2lE6URbhlTlfHj
+nC6KgOd0e/YZxp9JzAveHi5U20cfIIhjiCS+flVRUnOKSlCt6DWWoggUE4tZcDDw+5kYyK2hnLLOmbvR
+DCUq+DC9jQpL7pMm60sDfDKSZBJKfMk4RpJvkNTlRNX+DPPGmo0wBA1HH32oazwapyl90IXnmsZ2SmhE
+DFdfzZ5xIM9XH5X5jmAEDDUIUfbSEjUNcxsKMSS0ZTGPYMMNc8+N9rflsq3Uo7HBdtDbVBsrthE43FCD
+EXfDO7UIVuVxB0b8SV0u0RLCAEMQQRiB+GF4i9T443JQGVuOctgVOedDVy3C4IcT4RHqak/0OeRfuBGG
+QnOENca4kqcuuOaHF5547ATNHvpUecDBO+pwU766DUVATwRxsN820RvKb1p1782rPkIRhMOAQ37Vow4W
+c2PQUce/naY07OTeF4GD/EFQP7XixtmuEOB0Om800gAcnvUIoj+W1SENbOCU+152v/55T3PzG8INBGi+
+Ak5lLPwLmxDEN4MiBIGCDbTgv0qTBjHUYSgZjNsNgrDC6IFwcRYcAxvCIKUU+i9rWGPNACeyLmahZFz+
+2SFiuIWl+xFPBDFM01vC4DbwHNGCSamI9qLGvMBhZXAQnGD5Qng7etlrd3DglKecOEAkdvELZkCfGBfI
+PSsWzXJEuIHwtgjDMwoFMFE7YluGUhY2pKWMe9TUjWqXEDFoyobegx74hkA+IwJSUX38Ahn+xTs9QnKQ
+RCIMIgU3BBvkwAaefKFxAhnJTKrpC2WYwxjMsrz7dU9wmdNcHEUpEnG5QVNikuRdyjCU07nSjVYjQtnO
+Rkfj2BKXY0DllprEwMV9KUxjepaOmFbGYxYpmSghXS83eUU4ylGLjjSfNXOJJjXxbz/ummbaqrkQZH6B
+MWIAjGA0+T7fXfEG+MwnLXUSspFB5Zz9VJJ94jaDGxS0oMM7TB8UBKadVPIrSXmMG77Uvi+05S1/XEtE
+UULRNNVLDm3I6EQ2OtE16lKVRQpj+z6lGL6Rx0OAcgM8PgEKW5QKQ3RoA15aJtLu5BQvuWNiWhSwUA==
+EOF
+
+if [[ $DEBUG == 1 ]]; then
+  DEBUG_LOGS=$TMP/logs
+  mkdir -p $DEBUG_LOGS
+fi
+
+# from termcap - see https://gist.github.com/izabera/9903f9d942e2667ef2cb
+T_GREEN=$(tput setaf 2)
+T_BLUE=$(tput setaf 4)
+T_RESET=$(tput sgr0)
+T_START_ALT=$(tput smacs)
+T_END_ALT=$(tput rmacs)
+T_BOLD=$(tput bold)
+T_OFF=$(tput sgr0)
+T_CR=$(tput cr)
+T_NEL=$(tput nel)     # doesn't work; use $'\n'
+
+# alt character set from curses - see "Line Graphics" under `man 5 terminfo`
+T_ACS_HLINE="q"
+T_ACS_VLINE="x"
+T_ACS_ULCORNER="l"
+T_ACS_URCORNER="k"
+T_ACS_LLCORNER="m"
+T_ACS_LRCORNER="j"
+
+SKIP_DIRECTIVE=0
+SKIP_MESSAGE=""
+
+function debug() {
+  # Send a line to an error log
+
+  # Argument
+  #   $1  the line to send to the error log
+
+  if [[ $DEBUG == 1 ]]; then
+    printf '%s\n' "$1" 2>>$DEBUG_LOGS/error.log 1>&2
+  fi
+}
+
+function do_output_reset() {
+  # Capture the current width and truncate the OUTPUT string
+
+  WIDTH=$(tput cols)
+  OUTPUT=""
+}
+
+function do_output_banner() {
+  # Output a banner with lines of each side of a title
+
+  # Arguments
+  #   $1  title
+  #   $2  gives the color of the lines
+
+  local string=$1
+  local t_color=$2
+  local string_length=${#string}
+  local rest=$(( $WIDTH - 2 - $string_length ))
+  local i
+
+  OUTPUT+="$T_CR"
+  OUTPUT+="$t_color$T_START_ALT$T_ACS_HLINE$T_ACS_HLINE$T_RESET"
+  OUTPUT+="$T_BOLD$string$T_OFF"
+  OUTPUT+="$t_color"
+  OUTPUT+="$T_START_ALT"
+
+  for i in $(seq $rest); do
+    OUTPUT+="$T_ACS_HLINE"
+  done
+  OUTPUT+="$T_RESET"
+}
+
+function display() {
+  # Print the current value of the OUTPUT string to the terminal
+
+  # TODO: Add function that retrieves OUTPUT so that the `display` function doesn't
+  # access it directly.
+  printf '%s' "$OUTPUT"
+}
+
+function do_output_markdown() {
+  # Take text in the buffer array, format as Markdown, and add to the OUTPUT string
+
+  # Argument
+  #   $@  An array of lines to be evaluated as Markdown and then get appended to OUTPUT
+    local buffer=("$@")
+
+  local wrapped_text
+  local markdown_width="$(( ${WIDTH} - (2 * ${GLOW_MARGIN}) ))"
+
+  # Has to be rengenerated every time because the width might change
+  wrap_command="cat"
+  if [ -n "$WRAPPER" ]; then
+    wrap_command="$WRAPPER $markdown_width $FORMATTER"
+  fi
+
+  # Unlike other Markdown renderers, it would seem that glow always respects line breaks in
+  # paragraphs. That is why the "wrap" command is used to fill and wrap such lines.
+  wrapped_text=$(printf '%s\n' "${buffer[@]}" | $wrap_command | CLICOLOR_FORCE=1 glow -w "$markdown_width" -s "$STYLE_JSON")
+  OUTPUT+="$wrapped_text"
+}
+
+function do_output_commands() {
+  # Take text in the buffer array, add to the OUTPUT string
+
+  # Arguments
+  #   $@  The buffer array
+  local buffer=("$@")
+
+  local command
+
+  do_output_banner " commands " "$T_GREEN"
+
+  # Create a new array COMMANDS and for the lines in the buffer,
+  # copy them over to the COMMANDS array unless they are fencing (```).
+  COMMANDS=()
+  for command in "${buffer[@]}"; do
+    if [[ "$command" != \`\`\`* ]]; then
+      COMMANDS+=("$command")
+    fi
+  done
+
+  OUTPUT+=$(printf '%s\n' "${COMMANDS[@]}")
+}
+
+function do_output_results() {
+    # Take text in the COMMANDS array, eval them, and add result to the OUTPUT string
+
+  local eval_output
+  local command
+  local line
+
+  eval_output="$TMP/eval_output_$$"
+
+  # allows for multi-line loops, ifs, etc.
+  # eval "$(printf "%s\n" "${COMMANDS[@]}")"  >> "$eval_output"
+
+  # loops must be on one line, but we can get the "%" in to indicate the shell prompt
+  for command in "${COMMANDS[@]}"; do
+      printf '%s\n' "% $command" >> "$eval_output"
+      eval "$(printf '%s\n' "$command")" >> "$eval_output"
+  done
+
+  printf '%s' $'\n'
+  do_output_banner " result " "$T_GREEN"
+
+  while IFS= read -r line; do
+    # debug "line: $line"
+    OUTPUT+="$line"
+    OUTPUT+=$'\n'
+  done < "$eval_output"
+
+  # Clean up
+  rm "$eval_output"
+  COMMANDS=()
+}
+
+function pause() {
+  # pause for a key press
+
+  # Argument
+  #   $1  text to be display as a prompt before pausing for a key press
+
+  local command
+
+  # TODO: encapsulate
+  local skip
+  local prior_row
+  local prior_col
+  printf '\033[6n' ""
+  read -s -d \[ skip
+  read -s -d \; prior_row
+  read -s -d R prior_col
+  # debug "position: $prior_row,$prior_col"
+
+  local row=$(tput lines)
+  local col=1
+  printf '\33[%d;%dH' "$row" "$col"
+
+  printf '%s%s \033[K' "$INDENT" "$1"
+  read -n 1 -s -r -p "" command
+
+    printf '\33[%d;%dH' "$(( $prior_row + 1))" "1"
+  
+    case "$command" in
+    q)
+      exit
+      ;;
+    r)
+      rehandle_directive
+      ;;
+    s)
+      skip_directive
+      ;;
+    \*)
+      ;;
+  esac
+}
+
+function skip_directive() {
+  SKIP_DIRECTIVE=1
+}
+
+function rehandle_directive() {
+  # Take the previously collected directive name and buffer (in global vars D and B) and
+  # send them through handle_directive again. This is to support the redisplay (r) option
+  # when collecting a user key press in the pause function
+
+  handle_directive "${D}" "${B[@]}"
+}
+
+function handle_directive() {
+  # handle a directive from "process" by displaying properly
+
+  # Arguments
+  #   $1  the directive
+  #   $@  the buffer array of text
+
+  local directive=$1
+  shift
+  local buffer=("$@")
+
+  # cache the directive and buffer for requested rehandling of the directive
+  D="$directive"
+  B=("${buffer[@]}")
+
+  do_output_reset 
+
+  # since the directives have the same names as the display functions, there is probably a clever
+  # way to dispatch these with eval, but the point here is to decouple the processing of the input
+  # markdown from the display routines
+  case "$directive" in
+    "output_nothing")
+      :
+      ;;
+    "output_markdown" | "output_markdown_after_results")
+      do_output_markdown "${buffer[@]}"
+      ;;
+    "output_commands")
+      do_output_commands "${buffer[@]}"
+      if [[ "$SKIP_DIRECTIVE" == 0 ]]; then
+              SKIP_MESSAGE=" (s to skip)"
+      fi
+      ;;
+    "output_results")
+      if [[ "$SKIP_DIRECTIVE" == 0 ]]; then
+        do_output_results "${buffer[@]}"
+      fi
+      SKIP_DIRECTIVE=0
+      SKIP_MESSAGE=""
+      ;;
+  esac
+
+  if [ "$directive" != "output_results" ]; then
+    # TODO: Don't use clear. Just use escape seq
+    clear
+  fi
+
+  # TODO: leverage a function to check the value of OUTPUT so that this function
+  # doesn't access directly.
+  if [[ "$directive" != "output_nothing" && "$OUTPUT" != "" ]]; then
+    # debug ">>$OUTPUT<<"
+    display
+
+    pause "Press a key to continue$SKIP_MESSAGE . . ."
+  fi
+}
+
+function process() {
+  # Parse the incoming markdown file
+
+  local markdown=()
+  local line
+  local buffer=()
+  local directive
+  local next_directive
+
+  # Read in the tutorial as an array
+  while IFS= read -r line; do
+    markdown+=("$line")
+  done < "$MARKDOWN_FILE"
+
+  directive="output_markdown"
+  next_directive=""
+
+  for line in "${markdown[@]}"; do
+    # debug "line: $line"
+  
+    case "$line" in
+
+      \#\ *)
+        next_directive="output_nothing"
+        ;;
+
+      \#\#\ *)
+        next_directive="output_markdown"
+        ;;
+
+
+      \`\`\`shell\ \{\ .run\ \}*)
+        next_directive="output_commands"
+        ;;
+    
+      \`\`\`)
+        if [[ "$directive" == "output_markdown" ]]; then
+          :
+          # Do nothing; this is just the end of a fencing block and glow will render it
+          # as a normal fenced block within the markdown.
+        else
+          next_directive="output_results"
+        fi
+        ;;
+
+    esac
+
+    if [ "$next_directive" != "" ]; then
+      if [ "$next_directive" != "output_nothing" ]; then
+        handle_directive "$directive" "${buffer[@]}"
+      fi
+
+      if [ "$directive" == "output_results" ]; then
+
+        # If we've just output the results of some commands, there might be some markdown
+        # after that. So we're going to have to cheat to force that to be rendered.
+
+        # Get rid of first line of the buffer, which is the closing ```
+        buffer=("${buffer[@]:1}")
+
+        for buffer_line in "${buffer[@]}"; do
+          : # debug "buffer: $buffer_line"
+        done
+
+        # Need to output markdown after results
+        directive="output_markdown_after_results"
+
+        handle_directive "output_markdown_after_results" "${buffer[@]}"
+
+      fi
+
+      directive="$next_directive"
+      next_directive=""
+      buffer=()
+    fi
+
+    buffer+=("$line")
+
+  done
+
+  # Handle the last buffer
+  handle_directive "$directive" "${buffer[@]}"
+}
+
+process
+
+# The idea: From the command line, process a markdown file and display regular markdown
+# formatted for the terminal as a kind of informative "slide." Some chunks are fenced blocks for
+# `shell` with the attribute "run." Such text is run via eval. The commnands and the result are
+# displayed to the user.
+#
+# How it works:
+#
+# A markdown file is processed, and parts of the file are recognized as "directives." The four
+# directives are:
+#
+#   #                  Ignored -- Any text after a first-level markdown header is ignored.
+#   ##                 Text after a second-level markdown header is captured in a buffer. The
+#                      screen is cleared, and then the markdown result is displayed.
+#   ```                Ordinary fenced code that is formatted as markdown and displayed.
+#   ```shell { .run }  This is fenced code that will be "run" as shell commands; the output is
+#                      captured and displayed.
+#
+# The `process` function reads the markdown file and identifies directives, such as a secondary
+# header ("##") which we will want to display to the user. Lines after the directive are
+# collected into a buffer. Then when the next directive is encountered, the buffer is handed
+# over to the `handle_directive` function so that the buffer can be displayed properly. This is
+# really a little state machine.
+#
+# `handle_directive` passes the buffer for each type of directive to a function that
+# can provide customized handling. This is also a state machine. `handle_directive` delegates
+# the generation of output to functions that all start with `do_`, e.g., `do_output_markdown`.
+#
+# Then the `do_` functions generate the right output by appending to a global varialbe
+# named OUTPUT.
+#
+# Finally, there is a `display` function that prints the accumulated output to the terminal.
+#
+# The `process`, `handle_directive`, `do_` functions, and the global `OUTPUT` variable provides
+# some decoupling between concerns. Only the `do_` functions are allows to add to `OUTPUT`. Only
+# `display` function is allowed to write the output out to the terminal.
